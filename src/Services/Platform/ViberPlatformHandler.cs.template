@@ -1,0 +1,112 @@
+using TelegramBot.Interfaces;
+using TelegramBot.Models;
+
+namespace TelegramBot.Services.Platform;
+
+/// <summary>
+/// TEMPLATE: Viber-specific implementation of IMessagingPlatformHandler.
+/// Copy and customize this when ready to port to Viber.
+/// 
+/// Replace Telegram.Bot calls with Viber SDK calls.
+/// </summary>
+public class ViberPlatformHandler : IMessagingPlatformHandler
+{
+    // private readonly ViberBotClient _viber;
+    // 
+    // public ViberPlatformHandler(ViberBotClient viber)
+    // {
+    //     _viber = viber;
+    // }
+
+    public async Task SendMenuAsync(long chatId, List<CartItem> cart)
+    {
+        // TODO: Build Viber keyboard from cart
+        // var keyboard = BuildViberKeyboard(cart);
+        // await _viber.SendMessage(chatId, "🍽️ Menu", keyboard);
+        throw new NotImplementedException("Implement Viber SendMenu");
+    }
+
+    public async Task EditMenuAsync(long chatId, int messageId, List<CartItem> cart)
+    {
+        // TODO: Viber may not support message editing - you might need to send a new message
+        // await _viber.EditMessage(chatId, messageId, keyboard);
+        throw new NotImplementedException("Implement Viber EditMenu");
+    }
+
+    public async Task ShowCartAsync(long chatId, int messageId, List<CartItem> cart)
+    {
+        // TODO: Format cart and send via Viber
+        // var cartText = CartFormatter.Format(cart);
+        // await _viber.SendMessage(chatId, cartText);
+        throw new NotImplementedException("Implement Viber ShowCart");
+    }
+
+    public async Task SendCheckoutConfirmAsync(long chatId, List<CartItem> cart, decimal total)
+    {
+        // TODO: Send checkout confirmation
+        // var keyboard = BuildCheckoutKeyboard();
+        // var text = $"Total: ₱{total}\n\nProceed?";
+        // await _viber.SendMessage(chatId, text, keyboard);
+        throw new NotImplementedException("Implement Viber SendCheckoutConfirm");
+    }
+
+    public async Task AnswerButtonClickAsync(string callbackId, string toastText)
+    {
+        // TODO: Viber equivalent of Telegram's toast notifications
+        // await _viber.SendNotification(callbackId, toastText);
+        throw new NotImplementedException("Implement Viber AnswerButtonClick");
+    }
+
+    public async Task SendMessageAsync(long chatId, string text)
+    {
+        // TODO: Simple text message
+        // await _viber.SendMessage(chatId, text);
+        throw new NotImplementedException("Implement Viber SendMessage");
+    }
+
+    public async Task SendOrderSuccessAsync(long chatId, string orderText, string invoiceUrl)
+    {
+        // TODO: Send success message with payment link
+        // var keyboard = new ViberKeyboard { 
+        //     Button { Title = "Pay Now", Url = invoiceUrl } 
+        // };
+        // await _viber.SendMessage(chatId, "✅ Order placed!\n\n" + orderText, keyboard);
+        throw new NotImplementedException("Implement Viber SendOrderSuccess");
+    }
+
+    public async Task ShowMenuAfterClearAsync(long chatId, int messageId)
+    {
+        // TODO: Similar to SendMenuAsync
+        // await SendMenuAsync(chatId, new List<CartItem>());
+        throw new NotImplementedException("Implement Viber ShowMenuAfterClear");
+    }
+}
+
+// HELPER METHODS (examples)
+/* 
+private ViberKeyboard BuildViberKeyboard(List<CartItem> cart)
+{
+    var keyboard = new ViberKeyboard();
+    
+    // Build buttons similar to Telegram
+    foreach (var item in cart)
+    {
+        keyboard.AddButton(new ViberButton
+        {
+            Title = $"{item.Name} ₱{item.Price}",
+            ActionId = $"add|{item.Name}|{item.Price}",
+            ActionType = "reply"
+        });
+    }
+    
+    return keyboard;
+}
+
+private ViberKeyboard BuildCheckoutKeyboard()
+{
+    var keyboard = new ViberKeyboard();
+    keyboard.AddButton(new ViberButton { Title = "✅ Proceed", ActionId = "confirm_checkout" });
+    keyboard.AddButton(new ViberButton { Title = "❌ Cancel", ActionId = "clear_cart" });
+    return keyboard;
+}
+*/
