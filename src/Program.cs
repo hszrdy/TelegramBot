@@ -25,19 +25,24 @@ var n8nCheckoutUrl = Environment.GetEnvironmentVariable("N8N_CHECKOUT_WEBHOOK_UR
 var webhookUrl = Environment.GetEnvironmentVariable("WEBHOOK_URL")
     ?? throw new Exception("WEBHOOK_URL is not set");
 
+var menusWebhookUrl = Environment.GetEnvironmentVariable("N8N_MENUS_WEBHOOK_URL")
+    ?? throw new Exception("N8N_MENUS_WEBHOOK_URL");
+
 // ── Services ──────────────────────────────────────────────────────────────
 var botClient = new TelegramBotClient(botToken);
 var firestoreService = new FirestoreService(firestoreProjectId);
 var httpClient = new HttpClient();
 var n8nService = new N8nService(httpClient, n8nCheckoutUrl);
+var menuService = new MenuService(httpClient, menusWebhookUrl);
 
 builder.Services.AddSingleton<ITelegramBotClient>(botClient);
 builder.Services.AddSingleton(firestoreService);
 builder.Services.AddSingleton(n8nService);
+builder.Services.AddSingleton(menuService);
 
 // ── Platform Handler (Telegram-specific) ──────────────────────────────────
 builder.Services.AddSingleton<IMessagingPlatformHandler>(
-    new TelegramPlatformHandler(botClient)
+    new TelegramPlatformHandler(botClient, menuService)
 );
 
 // ── Business Logic Services (Platform-agnostic) ───────────────────────────

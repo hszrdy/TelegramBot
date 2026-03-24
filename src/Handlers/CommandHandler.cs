@@ -56,6 +56,8 @@ public class CommandHandler
     {
         // Reset to browsing state when user opens menu
         await _firestore.SetStateAsync(session.ChatId, SessionState.Browsing);
+        
+        // SendMenuAsync will fetch menu from MenuService and build keyboard
         await _platform.SendMenuAsync(message.Chat.Id, session.Cart);
     }
 

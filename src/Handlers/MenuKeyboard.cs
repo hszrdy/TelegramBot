@@ -1,40 +1,36 @@
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramBot.Models;
+using TelegramBot.Services;
 
 namespace TelegramBot.Handlers;
 
 public static class MenuKeyboard
 {
-    // Hardcoded menu — replace with Firestore/Sheets fetch if needed
-    private static readonly List<(string Name, decimal Price)> MenuItems = new()
+    public static async Task<InlineKeyboardMarkup> BuildAsync(
+        MenuService menuService,
+        List<CartItem>? cart = null)
     {
-        ("Coffee",    100),
-        ("Cheesecake",200),
-        ("Latte",     150),
-        ("Chicken",   900),
-        ("Kebab",      67),
-        ("Royal",      45),
-    };
-
-    public static InlineKeyboardMarkup Build(List<CartItem>? cart = null)
-    {
+        var menuItems = await menuService.GetMenuItemsAsync();
         var rows = new List<List<InlineKeyboardButton>>();
 
-        // Build menu item buttons (2 per row)
-        for (int i = 0; i < MenuItems.Count; i += 2)
+        for (int i = 0; i < menuItems.Count; i += 2)
         {
             var row = new List<InlineKeyboardButton>();
 
-            var item1 = MenuItems[i];
+            var item1 = menuItems[i];
             var qty1 = cart?.FirstOrDefault(c => c.Name == item1.Name)?.Qty ?? 0;
-            var label1 = qty1 > 0 ? $"{item1.Name} ₱{item1.Price} ({qty1})" : $"{item1.Name} — ₱{item1.Price}";
+            var label1 = qty1 > 0
+                ? $"{item1.Name} ₱{item1.Price} ({qty1})"
+                : $"{item1.Name} — ₱{item1.Price}";
             row.Add(InlineKeyboardButton.WithCallbackData(label1, $"add|{item1.Name}|{item1.Price}"));
 
-            if (i + 1 < MenuItems.Count)
+            if (i + 1 < menuItems.Count)
             {
-                var item2 = MenuItems[i + 1];
+                var item2 = menuItems[i + 1];
                 var qty2 = cart?.FirstOrDefault(c => c.Name == item2.Name)?.Qty ?? 0;
-                var label2 = qty2 > 0 ? $"{item2.Name} ₱{item2.Price} ({qty2})" : $"{item2.Name} — ₱{item2.Price}";
+                var label2 = qty2 > 0
+                    ? $"{item2.Name} ₱{item2.Price} ({qty2})"
+                    : $"{item2.Name} — ₱{item2.Price}";
                 row.Add(InlineKeyboardButton.WithCallbackData(label2, $"add|{item2.Name}|{item2.Price}"));
             }
 

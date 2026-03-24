@@ -3,6 +3,7 @@ using Telegram.Bot.Types.Enums;
 using TelegramBot.Handlers;
 using TelegramBot.Interfaces;
 using TelegramBot.Models;
+using TelegramBot.Services;
 
 namespace TelegramBot.Services.Platform;
 
@@ -13,30 +14,34 @@ namespace TelegramBot.Services.Platform;
 public class TelegramPlatformHandler : IMessagingPlatformHandler
 {
     private readonly ITelegramBotClient _bot;
+    private readonly MenuService _menuService;
 
-    public TelegramPlatformHandler(ITelegramBotClient bot)
+    public TelegramPlatformHandler(ITelegramBotClient bot, MenuService menuService)
     {
         _bot = bot;
+        _menuService = menuService;
     }
 
     public async Task SendMenuAsync(long chatId, List<CartItem> cart)
     {
+        var keyboard = await MenuKeyboard.BuildAsync(_menuService, cart);
         await _bot.SendMessage(
             chatId,
             $"🍽️ <b>Menu</b>\n\n{CartFormatter.FormatSummary(cart)}\n\nTap an item to add more:",
             parseMode: ParseMode.Html,
-            replyMarkup: MenuKeyboard.Build(cart)
+            replyMarkup: keyboard
         );
     }
 
     public async Task EditMenuAsync(long chatId, int messageId, List<CartItem> cart)
     {
+        var keyboard = await MenuKeyboard.BuildAsync(_menuService, cart);
         await _bot.EditMessageText(
             chatId,
             messageId,
             $"🍽️ <b>Menu</b>\n\n{CartFormatter.FormatSummary(cart)}\n\nTap an item to add more:",
             parseMode: ParseMode.Html,
-            replyMarkup: MenuKeyboard.Build(cart)
+            replyMarkup: keyboard
         );
     }
 
@@ -90,11 +95,12 @@ public class TelegramPlatformHandler : IMessagingPlatformHandler
 
     public async Task ShowMenuAfterClearAsync(long chatId, int messageId)
     {
+        var keyboard = await MenuKeyboard.BuildAsync(_menuService, null);
         await _bot.EditMessageText(
             chatId,
             messageId,
             "🛒 Cart cleared. Use /menu to start ordering.",
-            replyMarkup: MenuKeyboard.Build()
+            replyMarkup: keyboard
         );
     }
 }
