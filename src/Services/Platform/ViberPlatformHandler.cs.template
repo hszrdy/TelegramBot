@@ -8,20 +8,23 @@ namespace TelegramBot.Services.Platform;
 /// Copy and customize this when ready to port to Viber.
 /// 
 /// Replace Telegram.Bot calls with Viber SDK calls.
+/// NOTE: The MenuService parameter is now REQUIRED - it handles fetching dynamic menu items from N8n.
 /// </summary>
 public class ViberPlatformHandler : IMessagingPlatformHandler
 {
     // private readonly ViberBotClient _viber;
+    // private readonly MenuService _menuService;
     // 
-    // public ViberPlatformHandler(ViberBotClient viber)
+    // public ViberPlatformHandler(ViberBotClient viber, MenuService menuService)
     // {
     //     _viber = viber;
+    //     _menuService = menuService;
     // }
 
     public async Task SendMenuAsync(long chatId, List<CartItem> cart)
     {
-        // TODO: Build Viber keyboard from cart
-        // var keyboard = BuildViberKeyboard(cart);
+        // TODO: Build Viber keyboard from dynamic menu items
+        // var keyboard = await ViberKeyboard.BuildAsync(_menuService, cart);
         // await _viber.SendMessage(chatId, "🍽️ Menu", keyboard);
         throw new NotImplementedException("Implement Viber SendMenu");
     }
@@ -29,6 +32,7 @@ public class ViberPlatformHandler : IMessagingPlatformHandler
     public async Task EditMenuAsync(long chatId, int messageId, List<CartItem> cart)
     {
         // TODO: Viber may not support message editing - you might need to send a new message
+        // var keyboard = await ViberKeyboard.BuildAsync(_menuService, cart);
         // await _viber.EditMessage(chatId, messageId, keyboard);
         throw new NotImplementedException("Implement Viber EditMenu");
     }
