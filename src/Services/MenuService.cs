@@ -51,9 +51,12 @@ public class MenuService
             }
 
             // Convert MenuItem objects to tuples
-            var menuItems = result.Items
-                .Select(item => (item.Name, item.Price))
-                .ToList();
+            var menuItems = new List<(string Name, decimal Price)>();
+            foreach (var item in result.Items)
+            {
+                if (item.Availability.ToUpper() == MenuAvailabilityConstants.AVAILABLE.ToString())
+                    menuItems.Add((item.Name, item.Price));
+            }
 
             Console.WriteLine($"Fetched {menuItems.Count} menu items from N8n");
             return menuItems;
@@ -93,6 +96,8 @@ public class MenuItem
 
     [JsonPropertyName("price")]
     public decimal Price { get; set; }
+    [JsonPropertyName("availability")]
+    public string Availability { get; set; }
 }
 
 /// <summary>
@@ -103,4 +108,11 @@ public class MenuResponse
 {
     [JsonPropertyName("items")]
     public List<MenuItem> Items { get; set; } = new();
+}
+
+public enum MenuAvailabilityConstants
+{
+    AVAILABLE,
+    UNAVAILABLE,
+    UNKNOWN
 }
