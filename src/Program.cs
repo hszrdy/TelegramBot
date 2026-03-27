@@ -86,6 +86,13 @@ app.MapPost("/webhook", async (
     MessageHandler messageHandler,
     CallbackQueryHandler callbackHandler) =>
 {
+    // Only respond to private chats
+    if (update.Message != null && update.Message.Chat.Type != ChatType.Private)
+        return Results.Ok();
+
+    if (update.CallbackQuery != null && update.CallbackQuery.Message?.Chat.Type != ChatType.Private)
+        return Results.Ok();
+
     Console.WriteLine($"Update received: {update.Type}");
     Console.WriteLine($"Raw update: Message={update.Message != null}, CallbackQuery={update.CallbackQuery != null}");
 
