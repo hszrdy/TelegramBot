@@ -179,4 +179,14 @@ public class FirestoreService
             { "instructions", i.Instructions }
         }).ToList();
     }
+
+   public async Task SetOrderIdAsync(long chatId, string orderId)
+{
+    var docRef = _db.Collection(SessionsCollection).Document(chatId.ToString());
+    await docRef.SetAsync(new Dictionary<string, object>
+    {
+        { "order_id", orderId }
+    }, SetOptions.MergeAll);
+     Console.WriteLine($"[Firestore] SetOrderIdAsync complete");
+}
 }
