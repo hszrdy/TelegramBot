@@ -49,6 +49,10 @@ public class MessageHandler
         // Route based on session state
         switch (session.State)
         {
+            case SessionState.ChatMode:
+                await HandleChatModeAsync(message, session);
+                break;
+
             case SessionState.AwaitingName:
                 await _stateService.HandleAwaitingNameAsync(message.Chat.Id, text, session, _platform);
                 break;
@@ -65,5 +69,13 @@ public class MessageHandler
                 );
                 break;
         }
+    }
+
+    private async Task HandleChatModeAsync(Message message, Session session)
+    {
+        await _platform.SendMessageAsync(
+            message.Chat.Id,
+            "You are now in AI chat mode. I will respond to your messages here once the agent is connected.\n\nSend /menu to exit chat mode and return to the menu."
+        );
     }
 }
