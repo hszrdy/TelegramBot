@@ -41,6 +41,56 @@ public class OrderService
         await platform.EditMenuAsync(chatId, messageId, updatedCart);
     }
 
+    public async Task HandleIncrementItemAsync(
+        long chatId,
+        int messageId,
+        string itemName,
+        decimal price,
+        Session session,
+        string callbackId,
+        IMessagingPlatformHandler platform)
+    {
+        var item = new CartItem
+        {
+            Name = itemName,
+            Price = price,
+            Qty = 1
+        };
+
+        var updatedCart = await _firestore.UpdateCartAsync(chatId, "add", new List<CartItem> { item });
+        var added = updatedCart.First(i => i.Name == itemName);
+
+        await platform.AnswerButtonClickAsync(callbackId, $"✅ {itemName} x{added.Qty} in cart");
+        await platform.EditMenuAsync(chatId, messageId, updatedCart);
+    }
+
+    public async Task HandleDecrementItemAsync(
+        long chatId,
+        int messageId,
+        string itemName,
+        Session session,
+        string callbackId,
+        IMessagingPlatformHandler platform)
+    {
+        var existing = session.Cart.FirstOrDefault(i => i.Name.Equals(itemName, StringComparison.OrdinalIgnoreCase));
+        if (existing == null || existing.Qty <= 1)
+        {
+            // Remove the item if qty <=1
+            var item = new CartItem { Name = itemName, Qty = 1, Price = 0 };
+            var updatedCart = await _firestore.UpdateCartAsync(chatId, "remove", new List<CartItem> { item });
+            await platform.AnswerButtonClickAsync(callbackId, $"❌ {itemName} removed from cart");
+            await platform.EditMenuAsync(chatId, messageId, updatedCart);
+        }
+        else
+        {
+            // Decrement qty
+            existing.Qty -= 1;
+            var updatedCart = await _firestore.UpdateCartAsync(chatId, "update", new List<CartItem> { existing });
+            await platform.AnswerButtonClickAsync(callbackId, $"✅ {itemName} x{existing.Qty} in cart");
+            await platform.EditMenuAsync(chatId, messageId, updatedCart);
+        }
+    }
+
     public async Task HandleRemoveItemAsync(
         long chatId,
         int messageId,

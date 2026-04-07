@@ -151,6 +151,11 @@ public class FirestoreService
                 if (!string.IsNullOrEmpty(item.Instructions))
                     existing.Instructions = item.Instructions;
             }
+            else
+            {
+                // Add new item if not existing
+                cart.Add(item);
+            }
         }
         return cart;
     }

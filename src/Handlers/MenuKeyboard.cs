@@ -13,58 +13,22 @@ public static class MenuKeyboard
         var menuItems = await menuService.GetMenuItemsAsync();
         var rows = new List<List<InlineKeyboardButton>>();
 
-        for (int i = 0; i < menuItems.Count; i += 2)
+        foreach (var item in menuItems)
         {
-            var row = new List<InlineKeyboardButton>();
-
-            // Add first item
-            var item1 = menuItems[i];
-            var qty1 = 0;
+            var qty = 0;
             if (cart != null)
             {
-                var found = cart.FirstOrDefault(c => c.Name == item1.Name);
+                var found = cart.FirstOrDefault(c => c.Name == item.Name);
                 if (found != null)
                 {
-                    qty1 = found.Qty;
+                    qty = found.Qty;
                 }
             }
 
-            string label1;
-            if (qty1 > 0)
+            var row = new List<InlineKeyboardButton>
             {
-                label1 = $"{item1.Name} ₱{item1.Price} ({qty1})";
-            }
-            else
-            {
-                label1 = $"{item1.Name} — ₱{item1.Price}";
-            }
-            row.Add(InlineKeyboardButton.WithCallbackData(label1, $"add|{item1.Name}|{item1.Price}"));
-
-            // Add second item if it exists
-            if (i + 1 < menuItems.Count)
-            {
-                var item2 = menuItems[i + 1];
-                var qty2 = 0;
-                if (cart != null)
-                {
-                    var found = cart.FirstOrDefault(c => c.Name == item2.Name);
-                    if (found != null)
-                    {
-                        qty2 = found.Qty;
-                    }
-                }
-
-                string label2;
-                if (qty2 > 0)
-                {
-                    label2 = $"{item2.Name} ₱{item2.Price} ({qty2})";
-                }
-                else
-                {
-                    label2 = $"{item2.Name} — ₱{item2.Price}";
-                }
-                row.Add(InlineKeyboardButton.WithCallbackData(label2, $"add|{item2.Name}|{item2.Price}"));
-            }
+                InlineKeyboardButton.WithCallbackData($"{item.Name} ({qty})", $"select_item|{item.Name}|{item.Price}")
+            };
 
             rows.Add(row);
         }

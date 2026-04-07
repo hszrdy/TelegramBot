@@ -12,6 +12,9 @@ public class MenuService
 {
     private readonly HttpClient _http;
     private readonly string _menusWebhookUrl;
+    private List<(string Name, decimal Price)>? _cachedMenu;
+    private DateTime _cacheTime;
+    private readonly TimeSpan _cacheDuration = TimeSpan.FromMinutes(5);
 
     public MenuService(HttpClient http, string menusWebhookUrl)
     {
@@ -22,9 +25,15 @@ public class MenuService
     /// <summary>
     /// Fetch menu items from N8n (which queries Google Sheets).
     /// Returns hardcoded fallback if N8n fails.
+    /// Cached for 5 minutes to improve responsiveness.
     /// </summary>
     public async Task<List<(string Name, decimal Price)>> GetMenuItemsAsync()
     {
+        if (_cachedMenu != null && DateTime.UtcNow - _cacheTime < _cacheDuration)
+        {
+            return _cachedMenu;
+        }
+
         try
         {
             var response = await _http.GetAsync(_menusWebhookUrl);
@@ -59,22 +68,27 @@ public class MenuService
             }
 
             Console.WriteLine($"Fetched {menuItems.Count} menu items from N8n");
+            _cachedMenu = menuItems;
+            _cacheTime = DateTime.UtcNow;
             return menuItems;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error fetching menu from N8n: {ex.Message}");
-            return GetFallbackMenu();
+            var fallback = GetFallbackMenu();
+            _cachedMenu = fallback;
+            _cacheTime = DateTime.UtcNow;
+            return fallback;
         }
     }
 
     /// <summary>
     /// Hardcoded fallback menu if N8n is unavailable.
     /// </summary>
-    private static List<(string Name, decimal Price)> GetFallbackMenu()
+    private List<(string Name, decimal Price)> GetFallbackMenu()
     {
         Console.WriteLine("Using fallback menu");
-        return new()
+        var fallback = new List<(string Name, decimal Price)>
         {
             ("Coffee", 100),
             ("Cheesecake", 200),
@@ -83,6 +97,9 @@ public class MenuService
             ("Kebab", 6767),
             ("Royal", 45)
         };
+        _cachedMenu = fallback;
+        _cacheTime = DateTime.UtcNow;
+        return fallback;
     }
 }
 
