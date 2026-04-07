@@ -18,7 +18,7 @@ public class AIAgentService
 
     public async Task<AIAgentResponseFormat> SendMessageToAgentAsync(Session session, long chat_id)
     {
-
+        throw new NotImplementedException();
     }
 }
 
