@@ -28,17 +28,22 @@ var webhookUrl = Environment.GetEnvironmentVariable("WEBHOOK_URL")
 var menusWebhookUrl = Environment.GetEnvironmentVariable("N8N_MENUS_WEBHOOK_URL")
     ?? throw new Exception("N8N_MENUS_WEBHOOK_URL");
 
+var agentWebhookUrl = Environment.GetEnvironmentVariable("N8N_AI_INTEGRATION_URL")
+    ?? throw new Exception("N8N_AI_INTEGRATION_URL");
+
 // ── Services ──────────────────────────────────────────────────────────────
 var botClient = new TelegramBotClient(botToken);
 var firestoreService = new FirestoreService(firestoreProjectId);
 var httpClient = new HttpClient();
 var n8nService = new N8nService(httpClient, n8nCheckoutUrl);
 var menuService = new MenuService(httpClient, menusWebhookUrl);
+var agentService = new AgentService(httpClient, agentWebhookUrl);
 
 builder.Services.AddSingleton<ITelegramBotClient>(botClient);
 builder.Services.AddSingleton(firestoreService);
 builder.Services.AddSingleton(n8nService);
 builder.Services.AddSingleton(menuService);
+builder.Services.AddSingleton(agentService);
 
 // ── Platform Handler (Telegram-specific) ──────────────────────────────────
 builder.Services.AddSingleton<IMessagingPlatformHandler>(

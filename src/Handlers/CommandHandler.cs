@@ -31,6 +31,10 @@ public class CommandHandler
                 await HandleMenuAsync(message, session);
                 break;
 
+            case "/chat":
+                await HandleChatAsync(message, session);
+                break;
+
             case "/cart":
                 await HandleViewCartAsync(message, session);
                 break;
@@ -82,12 +86,22 @@ public class CommandHandler
         );
     }
 
+    private async Task HandleChatAsync(Message message, Session session)
+    {
+        await _firestore.SetStateAsync(session.ChatId, SessionState.ChatMode);
+        await _platform.SendMessageAsync(
+            message.Chat.Id,
+            "🤖 Chat mode activated. Send any message and I will respond as your AI assistant.\n\nUse /menu to return to the menu browsing experience."
+        );
+    }
+
     private async Task HandleHelpAsync(Message message)
     {
         await _platform.SendMessageAsync(
             message.Chat.Id,
             "📋 <b>Available commands:</b>\n\n" +
             "/menu — Browse and order items\n" +
+            "/chat — Enter AI chat mode\n" +
             "/cart — View your current cart\n" +
             "/cancel — Cancel your current order\n" +
             "/help — Show this message"
