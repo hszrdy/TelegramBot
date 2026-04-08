@@ -37,7 +37,7 @@ var firestoreService = new FirestoreService(firestoreProjectId);
 var httpClient = new HttpClient();
 var n8nService = new N8nService(httpClient, n8nCheckoutUrl);
 var menuService = new MenuService(httpClient, menusWebhookUrl);
-var agentService = new AgentService(httpClient, agentWebhookUrl);
+var agentService = new AIAgentService(httpClient, agentWebhookUrl);
 
 builder.Services.AddSingleton<ITelegramBotClient>(botClient);
 builder.Services.AddSingleton(firestoreService);
