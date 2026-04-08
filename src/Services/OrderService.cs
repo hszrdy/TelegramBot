@@ -152,6 +152,12 @@ public class OrderService
         return;
     }
 
+    if (!string.IsNullOrEmpty(result.InvoiceId))
+    {
+        await _firestore.SetXenditInvoiceIdAsync(chatId, result.InvoiceId);
+        Console.WriteLine($"[Order] Saved xendit_invoice_id: {result.InvoiceId}");
+    }
+
     await _firestore.SetStateAsync(chatId, SessionState.AwaitingPayment);
 
     var orderText = $"Order ID: <code>{result.OrderId}</code>";
