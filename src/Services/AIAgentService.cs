@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Telegram.Bot.Types;
 using TelegramBot.Models;
 
 namespace TelegramBot.Services;
@@ -14,11 +15,6 @@ public class AIAgentService
     {
         _http = http;
         _aiAgentWebhookUrl = agentWebhookUrl;
-    }
-
-    public Task<AIAgentResponseFormat> SendMessageToAgentAsync(Session session, long chatId)
-    {
-        return SendMessageToAgentAsync(session, chatId, string.Empty);
     }
 
     public async Task<AIAgentResponseFormat> SendMessageToAgentAsync(
