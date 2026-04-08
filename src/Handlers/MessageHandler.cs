@@ -14,15 +14,17 @@ public class MessageHandler
     private readonly IMessagingPlatformHandler _platform;
     private readonly CommandHandler _commandHandler;
     private readonly StateService _stateService;
-
+    private readonly AIAgentService _aiAgentService;
     public MessageHandler(
         IMessagingPlatformHandler platform,
         StateService stateService,
-        CommandHandler commandHandler)
+        CommandHandler commandHandler,
+        AIAgentService aiAgentService)
     {
         _platform = platform;
         _stateService = stateService;
         _commandHandler = commandHandler;
+        _aiAgentService = aiAgentService;
     }
 
     public async Task HandleAsync(Message message, Session session)
@@ -73,9 +75,26 @@ public class MessageHandler
 
     private async Task HandleChatModeAsync(Message message, Session session)
     {
+        var result = await _aiAgentService.SendMessageToAgentAsync(
+            session,
+            session.ChatId,
+            message.Text ?? ""
+        );
+
+        var replyText = result.ReplyText?.Trim();
+
+        if (result.Success && !string.IsNullOrWhiteSpace(replyText))
+        {
+            await _platform.SendMessageAsync(
+                message.Chat.Id,
+                replyText
+            );
+            return;
+        }
+
         await _platform.SendMessageAsync(
             message.Chat.Id,
-            "You are now in AI chat mode. I will respond to your messages here once the agent is connected.\n\nSend /menu to exit chat mode and return to the menu."
+            "Sorry, the assistant is unavailable right now. Please try again."
         );
     }
 }
