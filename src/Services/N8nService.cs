@@ -5,13 +5,6 @@ using TelegramBot.Models;
 
 namespace TelegramBot.Services;
 
-/// <summary>
-/// Handles N8n payment workflow integration.
-/// Sends payment requests to N8n which:
-/// 1. Creates Xendit invoice
-/// 2. Saves order to Google Sheets
-/// Xendit callback workflow handles payment notifications and order completion.
-/// </summary>
 public class N8nService
 {
     private readonly HttpClient _http;
@@ -23,25 +16,12 @@ public class N8nService
         _checkoutWebhookUrl = checkoutWebhookUrl;
     }
 
-    /// <summary>
-    /// Send payment request to N8n.
-    /// N8n will create Xendit invoice and store order in Google Sheets.
-    /// Returns invoice URL for user to complete payment.
-    /// </summary>
-    public async Task<CheckoutResult> CheckoutAsync(long chatId, Session session)
+    public async Task<CheckoutResult> CheckoutAsync(long chatId, Session session, string orderId)
     {
-        // Generate order ID
-        var orderId = Guid.NewGuid().ToString().Substring(0, 12).ToUpper();
-
-        // Calculate total
         var total = 0m;
         foreach (var item in session.Cart)
-        {
             total += item.Price * item.Qty;
-        }
 
-        // Payload to send to N8n Payment workflow
-        // N8n creates Xendit invoice; order details already in Firebase
         var payload = new
         {
             order_id = orderId,
@@ -57,26 +37,40 @@ public class N8nService
         try
         {
             var response = await _http.PostAsync(_checkoutWebhookUrl, content);
+            var responseBody = await response.Content.ReadAsStringAsync();
+
+            Console.WriteLine($"[N8n Response] Status: {response.StatusCode}");
+            Console.WriteLine($"[N8n Response] Body: {responseBody}");
 
             if (!response.IsSuccessStatusCode)
             {
                 return new CheckoutResult
                 {
                     Success = false,
-                    Error = $"N8n payment workflow failed with status {response.StatusCode}"
+                    Error = $"N8n payment workflow failed with status {response.StatusCode}. Body: {responseBody}"
                 };
             }
 
-            var responseBody = await response.Content.ReadAsStringAsync();
-            var result = JsonSerializer.Deserialize<CheckoutResult>(responseBody,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            CheckoutResult? result = null;
+
+            if (responseBody.TrimStart().StartsWith("["))
+            {
+                var list = JsonSerializer.Deserialize<List<CheckoutResult>>(responseBody,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                result = list?.FirstOrDefault();
+            }
+            else
+            {
+                result = JsonSerializer.Deserialize<CheckoutResult>(responseBody,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
 
             if (result == null)
             {
                 return new CheckoutResult
                 {
                     Success = false,
-                    Error = "Empty response from N8n"
+                    Error = $"Empty or unparseable response from N8n: {responseBody}"
                 };
             }
 
@@ -93,10 +87,6 @@ public class N8nService
     }
 }
 
-/// <summary>
-/// Response from N8n Payment workflow.
-/// Xendit webhook callback will use order_id to retrieve full order details.
-/// </summary>
 public class CheckoutResult
 {
     [JsonPropertyName("success")]

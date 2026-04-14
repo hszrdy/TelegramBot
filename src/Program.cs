@@ -6,7 +6,7 @@ using TelegramBot.Handlers;
 using TelegramBot.Interfaces;
 using TelegramBot.Services;
 using TelegramBot.Services.Platform;
-
+using TelegramBot.Models;
 // Load .env file for local development
 Env.Load();
 
@@ -122,6 +122,22 @@ app.MapPost("/webhook", async (
 
     return Results.Ok();
 });
+
+app.MapPost("/payment-confirmed", async (
+    HttpContext context,
+    FirestoreService firestore) =>
+{
+    var request = await context.Request.ReadFromJsonAsync<PaymentConfirmedRequest>();
+
+    if (request == null)
+        return Results.BadRequest("Missing chat_id");
+
+    await firestore.SetStateAsync(request.ChatIdLong, SessionState.Completed);
+    Console.WriteLine($"[Payment] State set to Complete for chatId: {request.ChatId}");
+
+    return Results.Ok(new { success = true });
+});
+
 // ── Health check ──────────────────────────────────────────────────────────
 app.MapGet("/", () => "Bot is running!");
 
@@ -133,3 +149,7 @@ await botClient.SetWebhook(
 Console.WriteLine($"Webhook set to {webhookUrl}/webhook");
 
 app.Run();
+public record PaymentConfirmedRequest(string ChatId)
+{
+    public long ChatIdLong => long.Parse(ChatId);
+}

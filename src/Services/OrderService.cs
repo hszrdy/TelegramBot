@@ -127,30 +127,44 @@ public class OrderService
     }
 
     public async Task ProcessCheckoutAsync(
-        long chatId,
-        Session session,
-        IMessagingPlatformHandler platform)
+    long chatId,
+    Session session,
+    IMessagingPlatformHandler platform)
+{
+    await platform.SendMessageAsync(chatId, "⏳ Processing your order...");
+
+    // Generate order ID here so we can save to Firestore before calling n8n
+    var orderId = Guid.NewGuid().ToString().Substring(0, 12).ToUpper();
+    Console.WriteLine($"[Order] Generated orderId: {orderId} for chatId: {chatId}");
+
+    // Save order_id to session — lets us look up chat_id from Xendit callback
+    await _firestore.SetOrderIdAsync(chatId, orderId);
+    Console.WriteLine($"[Order] Saved orderId to Firestore");
+
+    var result = await _n8n.CheckoutAsync(chatId, session, orderId);
+
+    if (!result.Success)
     {
-        await platform.SendMessageAsync(chatId, "⏳ Processing your order...");
-
-        var result = await _n8n.CheckoutAsync(chatId, session);
-
-        if (!result.Success)
-        {
-            await platform.SendMessageAsync(
-                chatId,
-                $"❌ Checkout failed: {result.Error}\n\nPlease try again or contact support."
-            );
-            return;
-        }
-
-        await _firestore.SetStateAsync(chatId, SessionState.AwaitingPayment);
-
-        var orderText = $"Order ID: <code>{result.OrderId}</code>";
-        await platform.SendOrderSuccessAsync(
+        await platform.SendMessageAsync(
             chatId,
-            orderText,
-            result.InvoiceUrl!
+            $"❌ Checkout failed: {result.Error}\n\nPlease try again or contact support."
         );
+        return;
     }
+
+    if (!string.IsNullOrEmpty(result.InvoiceId))
+    {
+        await _firestore.SetXenditInvoiceIdAsync(chatId, result.InvoiceId);
+        Console.WriteLine($"[Order] Saved xendit_invoice_id: {result.InvoiceId}");
+    }
+
+    await _firestore.SetStateAsync(chatId, SessionState.AwaitingPayment);
+
+    var orderText = $"Order ID: <code>{result.OrderId}</code>";
+    await platform.SendOrderSuccessAsync(
+        chatId,
+        orderText,
+        result.InvoiceUrl!
+    );
+}
 }
