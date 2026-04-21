@@ -14,15 +14,17 @@ public class MessageHandler
     private readonly IMessagingPlatformHandler _platform;
     private readonly CommandHandler _commandHandler;
     private readonly StateService _stateService;
-
+    private readonly AIAgentService _aiAgentService;
     public MessageHandler(
         IMessagingPlatformHandler platform,
         StateService stateService,
-        CommandHandler commandHandler)
+        CommandHandler commandHandler,
+        AIAgentService aiAgentService)
     {
         _platform = platform;
         _stateService = stateService;
         _commandHandler = commandHandler;
+        _aiAgentService = aiAgentService;
     }
 
     public async Task HandleAsync(Message message, Session session)
@@ -58,6 +60,10 @@ public class MessageHandler
 
         switch (session.State)
         {
+            case SessionState.ChatMode:
+                await HandleChatModeAsync(message, session);
+                break;
+
             case SessionState.AwaitingName:
                 await _stateService.HandleAwaitingNameAsync(message.Chat.Id, text, session, _platform);
                 break;
@@ -74,5 +80,30 @@ public class MessageHandler
                 );
                 break;
         }
+    }
+
+    private async Task HandleChatModeAsync(Message message, Session session)
+    {
+        var result = await _aiAgentService.SendMessageToAgentAsync(
+            session,
+            session.ChatId,
+            message.Text ?? ""
+        );
+
+        var replyText = result.ReplyText?.Trim();
+
+        if (result.Success && !string.IsNullOrWhiteSpace(replyText))
+        {
+            await _platform.SendMessageAsync(
+                message.Chat.Id,
+                replyText
+            );
+            return;
+        }
+
+        await _platform.SendMessageAsync(
+            message.Chat.Id,
+            "Sorry, the assistant is unavailable right now. Please try again."
+        );
     }
 }

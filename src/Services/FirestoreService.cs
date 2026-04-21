@@ -42,6 +42,7 @@ public class FirestoreService
             { "customer_name", string.Empty },
             { "customer_phone", string.Empty },
             { "order_id", string.Empty },
+            { "chat_id", chatId },
             { "xendit_invoice_id", string.Empty }
         });
 
@@ -184,4 +185,25 @@ public class FirestoreService
             { "instructions", i.Instructions }
         }).ToList();
     }
+
+   public async Task SetOrderIdAsync(long chatId, string orderId)
+{
+    var docRef = _db.Collection(SessionsCollection).Document(chatId.ToString());
+    await docRef.SetAsync(new Dictionary<string, object>
+    {
+        { "order_id", orderId },
+        { "chat_id", chatId }
+    }, SetOptions.MergeAll);
+     Console.WriteLine($"[Firestore] SetOrderIdAsync complete");
+}
+
+public async Task SetXenditInvoiceIdAsync(long chatId, string invoiceId)
+{
+    var docRef = _db.Collection(SessionsCollection).Document(chatId.ToString());
+    await docRef.SetAsync(new Dictionary<string, object>
+    {
+        { "xendit_invoice_id", invoiceId }
+    }, SetOptions.MergeAll);
+    Console.WriteLine($"[Firestore] SetXenditInvoiceIdAsync complete");
+}
 }

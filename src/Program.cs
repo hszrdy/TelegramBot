@@ -6,7 +6,7 @@ using TelegramBot.Handlers;
 using TelegramBot.Interfaces;
 using TelegramBot.Services;
 using TelegramBot.Services.Platform;
-
+using TelegramBot.Models;
 // Load .env file for local development
 Env.Load();
 
@@ -28,17 +28,22 @@ var webhookUrl = Environment.GetEnvironmentVariable("WEBHOOK_URL")
 var menusWebhookUrl = Environment.GetEnvironmentVariable("N8N_MENUS_WEBHOOK_URL")
     ?? throw new Exception("N8N_MENUS_WEBHOOK_URL");
 
+var agentWebhookUrl = Environment.GetEnvironmentVariable("N8N_AI_INTEGRATION_URL")
+    ?? throw new Exception("N8N_AI_INTEGRATION_URL");
+
 // ── Services ──────────────────────────────────────────────────────────────
 var botClient = new TelegramBotClient(botToken);
 var firestoreService = new FirestoreService(firestoreProjectId);
 var httpClient = new HttpClient();
 var n8nService = new N8nService(httpClient, n8nCheckoutUrl);
 var menuService = new MenuService(httpClient, menusWebhookUrl);
+var agentService = new AIAgentService(httpClient, agentWebhookUrl);
 
 builder.Services.AddSingleton<ITelegramBotClient>(botClient);
 builder.Services.AddSingleton(firestoreService);
 builder.Services.AddSingleton(n8nService);
 builder.Services.AddSingleton(menuService);
+builder.Services.AddSingleton(agentService);
 
 // ── Platform Handler (Telegram-specific) ──────────────────────────────────
 builder.Services.AddSingleton<IMessagingPlatformHandler>(
@@ -122,6 +127,22 @@ app.MapPost("/webhook", async (
 
     return Results.Ok();
 });
+
+app.MapPost("/payment-confirmed", async (
+    HttpContext context,
+    FirestoreService firestore) =>
+{
+    var request = await context.Request.ReadFromJsonAsync<PaymentConfirmedRequest>();
+
+    if (request == null)
+        return Results.BadRequest("Missing chat_id");
+
+    await firestore.SetStateAsync(request.ChatIdLong, SessionState.Completed);
+    Console.WriteLine($"[Payment] State set to Complete for chatId: {request.ChatId}");
+
+    return Results.Ok(new { success = true });
+});
+
 // ── Health check ──────────────────────────────────────────────────────────
 app.MapGet("/", () => "Bot is running!");
 
@@ -133,3 +154,7 @@ await botClient.SetWebhook(
 Console.WriteLine($"Webhook set to {webhookUrl}/webhook");
 
 app.Run();
+public record PaymentConfirmedRequest(string ChatId)
+{
+    public long ChatIdLong => long.Parse(ChatId);
+}
