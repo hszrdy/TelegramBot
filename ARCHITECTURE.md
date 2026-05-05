@@ -1,6 +1,7 @@
 # TelegramBot - Complete Architecture Guide
 
 ## Table of Contents
+
 1. [System Overview](#system-overview)
 2. [Architecture Layers](#architecture-layers)
 3. [Component Responsibilities](#component-responsibilities)
@@ -17,23 +18,29 @@
 ## System Overview
 
 ### What This Project Does
+
 This is a **Telegram ordering chatbot** that allows users to:
-- Browse a menu of items
+
+- Browse a dynamic menu of items fetched from Google Sheets via an n8n webhook
+- Ask questions and interact with an AI assistant
 - Add items to a shopping cart
 - Proceed through checkout
 - Make payments via N8n integration
 
 ### Technology Stack
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| **Messaging Platform** | Telegram Bot API | Receives user messages & callbacks |
-| **Web Server** | ASP.NET Core 8 | Webhook receiver for Telegram |
-| **Database** | Google Firestore | Persists user sessions & cart data |
-| **Payment/Checkout** | N8n | External workflow for order processing |
-| **JSON Serialization** | System.Text.Json | Handles Telegram's snake_case format |
+
+| Layer                  | Technology       | Purpose                                   |
+| ---------------------- | ---------------- | ----------------------------------------- |
+| **Messaging Platform** | Telegram Bot API | Receives user messages & callbacks        |
+| **Web Server**         | ASP.NET Core 8   | Webhook receiver for Telegram             |
+| **Database**           | Google Firestore | Persists user sessions & cart data        |
+| **Integrations**       | N8n workflows    | Handles menus, checkout, AI chat handling |
+| **JSON Serialization** | System.Text.Json | Handles Telegram's snake_case format      |
 
 ### Key Architectural Decision: Platform Abstraction
+
 The codebase uses an **IMessagingPlatformHandler** interface to abstract away Telegram-specific code. This allows:
+
 - Easy porting to Viber, WhatsApp, or other platforms
 - Clear separation of concerns
 - Platform-agnostic business logic
@@ -71,6 +78,8 @@ The codebase uses an **IMessagingPlatformHandler** interface to abstract away Te
 ┌─────────────────────────────────────────────────────────────┐
 │ DATA ACCESS & EXTERNAL SERVICES                            │
 │ - FirestoreService (user sessions, carts)                 │
+│ - MenuService (dynamically fetches menu items via n8n)      │
+│ - AIAgentService (sends chat logs to an AI via n8n)         │
 │ - N8nService (checkout webhook)                           │
 └─────────────────────────────────────────────────────────────┘
                              ▼
@@ -78,7 +87,7 @@ The codebase uses an **IMessagingPlatformHandler** interface to abstract away Te
 │ EXTERNAL SYSTEMS                                            │
 │ - Google Firestore (database)                             │
 │ - Telegram API (messaging)                                │
-│ - N8n (workflow/payments)                                 │
+│ - N8n (dynamic menus, AI integration, checkout)           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -88,7 +97,8 @@ The codebase uses an **IMessagingPlatformHandler** interface to abstract away Te
 
 ### **ENTRY POINT: Program.cs**
 
-**Responsibility**: 
+**Responsibility**:
+
 - Load environment variables
 - Build the ASP.NET Core application
 - Register services (Dependency Injection)
@@ -97,6 +107,7 @@ The codebase uses an **IMessagingPlatformHandler** interface to abstract away Te
 - Install Telegram webhook
 
 **Key Code Sections**:
+
 ```csharp
 // 1. Environment Config Loading
 var botToken = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN");
@@ -110,18 +121,20 @@ builder.Services.AddSingleton<OrderService>();
 
 // 3. JSON Configuration (Telegram uses snake_case)
 builder.Services.ConfigureHttpJsonOptions(options => {
-    options.SerializerOptions.PropertyNamingPolicy = 
+    options.SerializerOptions.PropertyNamingPolicy =
         System.Text.Json.JsonNamingPolicy.SnakeCaseLower;
 });
 
-// 4. Webhook Endpoint
+// 4. Webhook Endpoints
 app.MapPost("/webhook", async (Update update, ...) => { ... });
+app.MapPost("/payment-confirmed", async (HttpContext context, ...) => { ... }); // Changes state to COMPLETED
 
 // 5. Install Webhook
 await botClient.SetWebhook($"{webhookUrl}/webhook");
 ```
 
 **Extension Points**:
+
 - Add new environment variables for new features
 - Register new services in dependency injection
 - Add middleware for logging, rate limiting, authentication
@@ -133,9 +146,11 @@ await botClient.SetWebhook($"{webhookUrl}/webhook");
 All handlers receive Telegram updates and dispatch to business logic services.
 
 #### 1. **CallbackQueryHandler** - Button Clicks
+
 **Purpose**: Handle inline button presses from keyboards
 
 **Flow**:
+
 ```
 User clicks button
     ↓
@@ -153,6 +168,7 @@ OrderService calls IMessagingPlatformHandler to send response
 ```
 
 **Supported Callback Actions**:
+
 ```csharp
 "add|ItemName|Price"        // Add item to cart
 "remove|ItemName"           // Remove item from cart
@@ -164,13 +180,14 @@ OrderService calls IMessagingPlatformHandler to send response
 ```
 
 **Example: Adding an Item**
+
 ```
 Button pressed: "add|Coffee|100"
     ↓
 parts = ["add", "Coffee", "100"]
     ↓
 OrderService.HandleAddItemAsync(
-    chatId, messageId, "Coffee", 100m, session, 
+    chatId, messageId, "Coffee", 100m, session,
     callbackId, _platform
 )
     ↓
@@ -186,9 +203,11 @@ Calls platform.EditMenuAsync() → Updates menu with new qty
 ```
 
 #### 2. **MessageHandler** - Text Messages
+
 **Purpose**: Handle user text input based on session state
 
 **Flow**:
+
 ```
 User sends text message
     ↓
@@ -207,23 +226,28 @@ Routes based on session.State:
 | State | Triggered By | User Input | Next State |
 |-------|---|---|---|
 | `BROWSING` | /menu | Buttons or /help | BROWSING |
+| `CHAT_MODE` | /chat | Text (forwarded to AI Agent) | CHAT_MODE |
 | `AWAITING_NAME` | checkout confirmation | Customer name text | AWAITING_PHONE |
 | `AWAITING_PHONE` | name entered | Phone number text | AWAITING_PAYMENT |
 | `AWAITING_PAYMENT` | checkout info complete | (automatic) | COMPLETED |
 
 #### 3. **CommandHandler** - Slash Commands
+
 **Purpose**: Handle special commands that work in any state
 
 **Supported Commands**:
+
 ```
 /start       → Show welcome menu
 /menu        → Browse items (reset state to BROWSING)
+/chat        → Toggle to conversation mode via the AI Agent
 /cart        → View current cart
 /cancel      → Clear cart and reset
 /help        → Show available commands
 ```
 
 **Example: /menu Flow**
+
 ```csharp
 /menu command received
     ↓
@@ -243,6 +267,7 @@ User sees menu with buttons
 ### **PLATFORM ABSTRACTION LAYER**
 
 #### **IMessagingPlatformHandler** Interface
+
 Defines all platform operations in a messaging-system-agnostic way.
 
 ```csharp
@@ -252,7 +277,7 @@ public interface IMessagingPlatformHandler {
     Task EditMenuAsync(long chatId, int messageId, List<CartItem> cart);
     Task ShowCartAsync(long chatId, int messageId, List<CartItem> cart);
     Task SendCheckoutConfirmAsync(long chatId, List<CartItem> cart, decimal total);
-    
+
     // Interactions
     Task AnswerButtonClickAsync(string callbackId, string toastText);
     Task SendMessageAsync(long chatId, string text);
@@ -262,22 +287,24 @@ public interface IMessagingPlatformHandler {
 ```
 
 **Why This Matters**:
+
 - All Telegram-specific code lives in `TelegramPlatformHandler`
 - Business logic doesn't know about Telegram
 - Easy to implement `ViberPlatformHandler` later
 - Each method maps to a platform-specific operation
 
 #### **TelegramPlatformHandler** Implementation
+
 Contains all `Telegram.Bot` library calls.
 
 ```csharp
 public class TelegramPlatformHandler : IMessagingPlatformHandler {
     private readonly ITelegramBotClient _bot;
-    
+
     public async Task SendMenuAsync(long chatId, List<CartItem> cart) {
         // Telegram-specific: create inline keyboard
         var keyboard = MenuKeyboard.Build(cart);
-        
+
         // Call Telegram API
         await _bot.SendMessage(
             chatId,
@@ -294,9 +321,11 @@ public class TelegramPlatformHandler : IMessagingPlatformHandler {
 ### **BUSINESS LOGIC LAYER**
 
 #### 1. **OrderService** - Cart Operations
+
 **Purpose**: Handle all shopping cart interactions without platform knowledge
 
 **Key Methods**:
+
 ```csharp
 // Add item to cart
 HandleAddItemAsync(chatId, messageId, itemName, price, session, callbackId, platform)
@@ -333,9 +362,11 @@ ProcessCheckoutAsync(chatId, session, platform)
 **Key Pattern**: All methods accept `IMessagingPlatformHandler platform` parameter, making them platform-independent.
 
 #### 2. **StateService** - User State Transitions
+
 **Purpose**: Handle multi-step checkout flow (name → phone → payment)
 
 **Key Methods**:
+
 ```csharp
 // Handle user entering their name during checkout
 HandleAwaitingNameAsync(chatId, nameInput, session, platform)
@@ -358,9 +389,11 @@ HandleAwaitingPhoneAsync(chatId, phoneInput, session, platform)
 ### **DATA ACCESS LAYER**
 
 #### 1. **FirestoreService** - Persistence
+
 **Purpose**: All database operations
 
 **Firestore Data Structure**:
+
 ```
 Firestore Database: sessions/{chatId}/
 
@@ -382,6 +415,7 @@ Document: {
 ```
 
 **Key Methods**:
+
 ```csharp
 // Get or create user session
 GetOrCreateSessionAsync(long chatId)
@@ -412,14 +446,15 @@ ResetSessionAsync(long chatId)
 ```
 
 **Atomic Transactions**:
+
 ```csharp
 await _db.RunTransactionAsync(async transaction => {
     var snapshot = await transaction.GetSnapshotAsync(docRef);
     var cart = DeserializeCart(snapshot);
-    
+
     // Modify
     cart = AddItems(cart, incomingItems);
-    
+
     // Update atomically - prevents race condition if user
     // adds item in 2 windows simultaneously
     transaction.Update(docRef, "cart", SerializeCart(cart));
@@ -427,53 +462,41 @@ await _db.RunTransactionAsync(async transaction => {
 ```
 
 **Type Conversion Note**:
+
 - C# uses `decimal` for prices
 - Firestore doesn't support `decimal` natively
 - SerializeCart converts `decimal → double` for Firestore
 - DeserializeCart converts `double → decimal` when reading
 
 #### 2. **N8nService** - External Workflow
+
 **Purpose**: Call N8n webhook to process checkout
 
 **How It Works**:
+
 ```csharp
 public async Task<CheckoutResult> CheckoutAsync(long chatId, Session session) {
-    var payload = new {
-        chat_id = chatId,
-        customer_name = session.CustomerName,
-        customer_phone = session.CustomerPhone,
-        cart = session.Cart.Select(i => new {
-            name = i.Name,
-            qty = i.Qty,
-            price = i.Price,
-            instructions = i.Instructions
-        }),
-        total = session.Cart.Sum(i => i.Price * i.Qty)
-    };
-    
-    // Send to N8n webhook
-    var response = await _http.PostAsync(_checkoutWebhookUrl, content);
-    
-    // N8n processes order and returns:
-    // - Success: true/false
-    // - InvoiceUrl: Payment link
-    // - OrderId: Unique order ID
-    // - Error: Error message if failed
+    // Collect cart info, generate payload and post to N8N_CHECKOUT_WEBHOOK_URL
+    // N8n processes order and returns invoice URL and Order Id.
 }
 ```
 
-**What N8n Does** (Your External Workflow):
-1. Receives order details (cart, customer info)
-2. Validates order
-3. Creates invoice in payment gateway (Xendit, Stripe, etc.)
-4. Returns invoice URL + order ID
-5. Handles payment confirmation webhooks
+#### 3. **MenuService** - Dynamic Menu Fetching
+
+**Purpose**: Interacts with n8n webhook to query Google Sheets and return active product listings.
+**How It Works**: Posts a request to the `N8N_MENUS_WEBHOOK_URL` and parses a JSON response `{ items: [{ name, price, availability }] }`. Provides a hardcoded fallback if requests fail.
+
+#### 4. **AIAgentService** - AI Conversational Logic
+
+**Purpose**: Routes user text queries in `CHAT_MODE` to an n8n webhook executing an AI model logic.
+**How It Works**: Sends session state, cart and history to `N8N_AI_INTEGRATION_URL` and awaits a `reply_text` payload.
 
 ---
 
 ## Data Models
 
 ### **Session**
+
 ```csharp
 public class Session {
     public long ChatId { get; set; }              // Telegram user ID
@@ -487,9 +510,11 @@ public class Session {
 ```
 
 ### **SessionState Constants**
+
 ```csharp
 public static class SessionState {
     public const string Browsing = "BROWSING";           // Default, browsing menu
+    public const string ChatMode = "CHAT_MODE";           // Sending conversational messages to the AI Agent
     public const string AwaitingName = "AWAITING_NAME";   // Checkout step 1
     public const string AwaitingPhone = "AWAITING_PHONE"; // Checkout step 2
     public const string AwaitingPayment = "AWAITING_PAYMENT"; // Awaiting payment
@@ -498,6 +523,7 @@ public static class SessionState {
 ```
 
 ### **CartItem**
+
 ```csharp
 public class CartItem {
     public string Name { get; set; }              // "Coffee", "Cake", etc.
@@ -508,6 +534,7 @@ public class CartItem {
 ```
 
 ### **CheckoutResult**
+
 ```csharp
 public class CheckoutResult {
     public bool Success { get; set; }
@@ -534,6 +561,12 @@ FIREBASE_PROJECT_ID=your-firebase-project-id
 
 # N8n Webhook URL for checkout processing
 N8N_CHECKOUT_WEBHOOK_URL=https://your-n8n-instance.com/webhook/checkout
+
+# N8n Webhook URL for dynamic menu resolving
+N8N_MENUS_WEBHOOK_URL=https://your-n8n-instance.com/webhook/menus
+
+# N8n Webhook URL for the AI Chat Agent
+N8N_AI_INTEGRATION_URL=https://your-n8n-instance.com/webhook/ai
 
 # Public webhook URL that Telegram uses to reach your bot
 # Must be HTTPS and publicly accessible
@@ -568,6 +601,8 @@ builder.Services.AddSingleton<OrderService>();
 builder.Services.AddSingleton<StateService>();
 builder.Services.AddSingleton<FirestoreService>();
 builder.Services.AddSingleton<N8nService>();
+builder.Services.AddSingleton<MenuService>();
+builder.Services.AddSingleton<AIAgentService>();
 
 // Platform-specific handler
 builder.Services.AddSingleton<IMessagingPlatformHandler>(
@@ -663,7 +698,7 @@ builder.Services.AddSingleton<CallbackQueryHandler>();
                            │
                            ▼
      User sees menu refresh with "Coffee — ₱100 (1)"
-        
+
         ┌──────────────────────────────────────────────────────┐
         │ 3. USER CLICKS "✅ CHECKOUT" BUTTON                  │
         └──────────────────────────────────────────────────────┘
@@ -805,15 +840,17 @@ builder.Services.AddSingleton<CallbackQueryHandler>();
 **Steps**:
 
 1. **Update MenuKeyboard** to generate button:
+
 ```csharp
 // src/Handlers/MenuKeyboard.cs
 row.Add(InlineKeyboardButton.WithCallbackData(
-    "⭐ Add to Favorites", 
+    "⭐ Add to Favorites",
     $"favorite|{item.Name}"
 ));
 ```
 
 2. **Extend IMessagingPlatformHandler**:
+
 ```csharp
 // src/Interfaces/IMessagingPlatformHandler.cs
 public interface IMessagingPlatformHandler {
@@ -823,6 +860,7 @@ public interface IMessagingPlatformHandler {
 ```
 
 3. **Implement in TelegramPlatformHandler**:
+
 ```csharp
 // src/Services/Platform/TelegramPlatformHandler.cs
 public async Task SendFavoriteConfirmAsync(long chatId, string itemName) {
@@ -834,21 +872,23 @@ public async Task SendFavoriteConfirmAsync(long chatId, string itemName) {
 ```
 
 4. **Add handler method in OrderService**:
+
 ```csharp
 // src/Services/OrderService.cs
 public async Task HandleFavoriteAsync(
-    long chatId, string itemName, Session session, 
+    long chatId, string itemName, Session session,
     IMessagingPlatformHandler platform) {
-    
+
     // Save to Firestore favorites
     await _firestore.AddToFavoritesAsync(chatId, itemName);
-    
+
     // Show confirmation
     await platform.SendFavoriteConfirmAsync(chatId, itemName);
 }
 ```
 
 5. **Add case in CallbackQueryHandler**:
+
 ```csharp
 // src/Handlers/CallbackQueryHandler.cs
 case "favorite":
@@ -860,11 +900,12 @@ case "favorite":
 ```
 
 6. **Extend FirestoreService**:
+
 ```csharp
 // src/Services/FirestoreService.cs
 public async Task AddToFavoritesAsync(long chatId, string itemName) {
     var docRef = _db.Collection(SessionsCollection).Document(chatId.ToString());
-    await docRef.UpdateAsync("favorites", 
+    await docRef.UpdateAsync("favorites",
         FieldValue.ArrayUnion(itemName));
 }
 ```
@@ -878,6 +919,7 @@ public async Task AddToFavoritesAsync(long chatId, string itemName) {
 **Steps**:
 
 1. Add handler in CommandHandler:
+
 ```csharp
 // src/Handlers/CommandHandler.cs
 case "/profile":
@@ -889,7 +931,7 @@ private async Task HandleProfileAsync(Message message, Session session) {
         $"Name: {session.CustomerName ?? "Not set"}\n" +
         $"Phone: {session.CustomerPhone ?? "Not set"}\n" +
         $"Orders: {session.OrderId ?? "None"}";
-    
+
     await _platform.SendMessageAsync(message.Chat.Id, profileText);
 }
 ```
@@ -905,6 +947,7 @@ private async Task HandleProfileAsync(Message message, Session session) {
 **Steps**:
 
 1. **Extend SessionState**:
+
 ```csharp
 public static class SessionState {
     // ... existing states ...
@@ -913,6 +956,7 @@ public static class SessionState {
 ```
 
 2. **Add field to Session**:
+
 ```csharp
 public class Session {
     // ... existing fields ...
@@ -921,47 +965,49 @@ public class Session {
 ```
 
 3. **Update HandleConfirmCheckoutAsync**:
+
 ```csharp
-public async Task HandleConfirmCheckoutAsync(long chatId, Session session, 
+public async Task HandleConfirmCheckoutAsync(long chatId, Session session,
     IMessagingPlatformHandler platform) {
-    
+
     if (string.IsNullOrEmpty(session.CustomerName)) {
         await _firestore.SetStateAsync(chatId, SessionState.AwaitingName);
         await platform.SendMessageAsync(chatId, "Please enter your full name:");
         return;
     }
-    
+
     if (string.IsNullOrEmpty(session.CustomerPhone)) {
         await _firestore.SetStateAsync(chatId, SessionState.AwaitingPhone);
         await platform.SendMessageAsync(chatId, "Please enter your phone number:");
         return;
     }
-    
+
     if (string.IsNullOrEmpty(session.DeliveryAddress)) {
         await _firestore.SetStateAsync(chatId, SessionState.AwaitingAddress);
         await platform.SendMessageAsync(chatId, "Please enter delivery address:");
         return;
     }
-    
+
     // All info collected
     await ProcessCheckoutAsync(chatId, session, platform);
 }
 ```
 
 4. **Handle in StateService**:
+
 ```csharp
 // Add to StateService.cs
 public async Task HandleAwaitingAddressAsync(
-    long chatId, string addressInput, Session session, 
+    long chatId, string addressInput, Session session,
     IMessagingPlatformHandler platform) {
-    
+
     if (addressInput.Length < 5) {
         await platform.SendMessageAsync(chatId, "Please enter a valid address:");
         return;
     }
-    
+
     await _firestore.SetDeliveryAddressAsync(chatId, addressInput);
-    
+
     // Refresh session and continue checkout
     var updatedSession = await _firestore.GetOrCreateSessionAsync(chatId);
     await _orderService.ProcessCheckoutAsync(chatId, updatedSession, platform);
@@ -969,6 +1015,7 @@ public async Task HandleAwaitingAddressAsync(
 ```
 
 5. **Add to MessageHandler routing**:
+
 ```csharp
 case SessionState.AwaitingAddress:
     await _stateService.HandleAwaitingAddressAsync(message.Chat.Id, text, session, _platform);
@@ -976,7 +1023,8 @@ case SessionState.AwaitingAddress:
 ```
 
 6. **Update N8n payload**:
-In `N8nService.CheckoutAsync()`, add delivery address:
+   In `N8nService.CheckoutAsync()`, add delivery address:
+
 ```csharp
 var payload = new {
     // ... existing fields ...
@@ -993,24 +1041,25 @@ var payload = new {
 **Steps**:
 
 1. **Create new Service**:
+
 ```csharp
 // src/Services/InventoryService.cs
 public class InventoryService {
     private readonly HttpClient _http;
     private readonly string _inventoryApiUrl;
-    
+
     public InventoryService(HttpClient http, string inventoryApiUrl) {
         _http = http;
         _inventoryApiUrl = inventoryApiUrl;
     }
-    
+
     public async Task<int> GetStockAsync(string itemName) {
         var response = await _http.GetAsync($"{_inventoryApiUrl}/stock/{itemName}");
         var json = await response.Content.ReadAsStringAsync();
         var result = JsonSerializer.Deserialize<StockResult>(json);
         return result?.Qty ?? 0;
     }
-    
+
     public async Task<bool> ReserveStockAsync(string itemName, int qty) {
         var response = await _http.PostAsync(
             $"{_inventoryApiUrl}/reserve",
@@ -1027,6 +1076,7 @@ public class StockResult {
 ```
 
 2. **Register in Program.cs**:
+
 ```csharp
 var inventoryApiUrl = Environment.GetEnvironmentVariable("INVENTORY_API_URL");
 var inventoryService = new InventoryService(httpClient, inventoryApiUrl);
@@ -1034,26 +1084,27 @@ builder.Services.AddSingleton(inventoryService);
 ```
 
 3. **Use in OrderService**:
+
 ```csharp
 public async Task HandleAddItemAsync(
     long chatId, int messageId, string itemName, decimal price,
-    Session session, string callbackId, 
+    Session session, string callbackId,
     InventoryService inventory,
     IMessagingPlatformHandler platform) {
-    
+
     // Check stock
     int stock = await inventory.GetStockAsync(itemName);
     if (stock <= 0) {
-        await platform.AnswerButtonClickAsync(callbackId, 
+        await platform.AnswerButtonClickAsync(callbackId,
             $"❌ {itemName} is out of stock");
         return;
     }
-    
+
     // Add to cart
     var item = new CartItem { Name = itemName, Price = price, Qty = 1 };
-    var updatedCart = await _firestore.UpdateCartAsync(chatId, "add", 
+    var updatedCart = await _firestore.UpdateCartAsync(chatId, "add",
         new List<CartItem> { item });
-    
+
     // ... rest of logic
 }
 ```
@@ -1079,12 +1130,13 @@ private static readonly List<(string Name, decimal Price)> MenuItems = new() {
 ```
 
 **Better Solution**: Fetch from Firestore
+
 ```csharp
 // Store menu in Firestore collection: menus/{businessId}/items
 // Then in MenuKeyboard:
 public static async Task<InlineKeyboardMarkup> BuildAsync(
     FirestoreService firestore, List<CartItem>? cart = null) {
-    
+
     var items = await firestore.GetMenuItemsAsync();
     // ... build keyboard from items
 }
@@ -1099,11 +1151,11 @@ public static async Task<InlineKeyboardMarkup> BuildAsync(
 ```csharp
 public static string FormatSummary(List<CartItem> cart) {
     if (cart.Count == 0) return "🛒 Your cart is empty.";
-    
+
     var total = cart.Sum(i => i.Price * i.Qty);
     var discount = total > 500m ? total * 0.1m : 0m;  // 10% discount over ₱500
     var subtotal = total - discount;
-    
+
     return $"Subtotal: ₱{total}\n" +
            $"Discount: -₱{discount}\n" +
            $"Total: ₱{subtotal}";
@@ -1127,7 +1179,7 @@ public async Task SendItemDetailsAsync(long chatId, string itemName, decimal pri
             InlineKeyboardButton.WithCallbackData("Add - Extra Hot", $"add|{itemName}|{price}|extra-hot")
         }
     });
-    
+
     await _bot.SendMessage(chatId, $"{itemName} - ₱{price}", replyMarkup: keyboard);
 }
 ```
@@ -1145,7 +1197,7 @@ public async Task<List<Order>> GetOrderHistoryAsync(long chatId) {
         .OrderByDescending("created_at")
         .Limit(10)
         .GetSnapshotAsync();
-    
+
     return orders.Documents
         .Select(doc => new Order {
             OrderId = doc.Id,
@@ -1158,8 +1210,8 @@ public async Task<List<Order>> GetOrderHistoryAsync(long chatId) {
 // Add new command handler
 case "/orders":
     var orders = await _firestore.GetOrderHistoryAsync(message.Chat.Id);
-    var text = "📋 Your Orders:\n\n" + 
-        string.Join("\n", orders.Select(o => 
+    var text = "📋 Your Orders:\n\n" +
+        string.Join("\n", orders.Select(o =>
             $"• {o.OrderId} - ₱{o.Total} ({o.CreatedAt:MM/dd})"));
     await _platform.SendMessageAsync(message.Chat.Id, text);
     break;
@@ -1170,28 +1222,34 @@ case "/orders":
 ## Troubleshooting
 
 ### **Problem: Callbacks arriving as "Unknown"**
+
 **Cause**: JSON deserialization issue  
 **Solution**: Ensure Program.cs has JSON configuration:
+
 ```csharp
 builder.Services.ConfigureHttpJsonOptions(options => {
-    options.SerializerOptions.PropertyNamingPolicy = 
+    options.SerializerOptions.PropertyNamingPolicy =
         System.Text.Json.JsonNamingPolicy.SnakeCaseLower;
 });
 ```
 
 ### **Problem: Cart not updating across different menu instances**
+
 **Cause**: Session not refreshing from Firestore  
 **Solution**: Always call `GetOrCreateSessionAsync(chatId)` before using session in handlers
 
 ### **Problem: Checkout webhook fails with "Unable to create converter for Decimal"**
+
 **Cause**: Firestore can't serialize `decimal` type  
 **Solution**: `FirestoreService` already handles this - converts decimal ↔ double
 
 ### **Problem: State transitions not persisting**
+
 **Cause**: Forgot to call `SetStateAsync()`  
 **Solution**: Always update Firestore state when changing session state
 
 ### **Problem: Buttons not responding**
+
 **Cause**: CallbackQueryHandler missing case for action  
 **Solution**: Add case in switch statement and implement handler method
 
@@ -1200,6 +1258,7 @@ builder.Services.ConfigureHttpJsonOptions(options => {
 ## Best Practices
 
 ### **1. Always Use Atomic Transactions for Cart Updates**
+
 ```csharp
 // ✓ GOOD - Atomic, prevents race conditions
 await _db.RunTransactionAsync(async transaction => {
@@ -1215,6 +1274,7 @@ await SaveCart(cart);
 ```
 
 ### **2. Keep Handlers Thin, Move Logic to Services**
+
 ```csharp
 // ✓ GOOD
 public class CallbackQueryHandler {
@@ -1235,6 +1295,7 @@ public class CallbackQueryHandler {
 ```
 
 ### **3. Use IMessagingPlatformHandler Not ITelegramBotClient**
+
 ```csharp
 // ✓ GOOD - Platform agnostic
 public async Task HandleAsync(IMessagingPlatformHandler platform) {
@@ -1248,6 +1309,7 @@ public async Task HandleAsync(ITelegramBotClient bot) {
 ```
 
 ### **4. Validate Input Early**
+
 ```csharp
 // ✓ GOOD
 public async Task HandleNameAsync(string input, IMessagingPlatformHandler platform) {
@@ -1265,6 +1327,7 @@ public async Task HandleNameAsync(string input) {
 ```
 
 ### **5. Always Refresh Session from Firestore Before Using**
+
 ```csharp
 // ✓ GOOD
 var session = await _firestore.GetOrCreateSessionAsync(chatId);
@@ -1275,6 +1338,7 @@ var session = session;  // Using old session object
 ```
 
 ### **6. Log Important Operations**
+
 ```csharp
 // ✓ GOOD
 try {
@@ -1290,6 +1354,7 @@ try {
 ```
 
 ### **7. Use Consistent Naming**
+
 - Files: PascalCase (`OrderService.cs`)
 - Classes: PascalCase (`CallbackQueryHandler`)
 - Methods: PascalCase (`HandleAddItemAsync`)
@@ -1302,18 +1367,18 @@ try {
 
 ### Quick Reference
 
-| When You Need To... | File | Method |
-|---|---|---|
-| Add a button | `MenuKeyboard.cs` | Update MenuItems or Build() |
-| Handle button click | `CallbackQueryHandler.cs` | Add case in HandleAsync() |
-| Add a command | `CommandHandler.cs` | Add case in HandleAsync() |
-| Store user data | `FirestoreService.cs` | New method |
-| Call external service | Create `*Service.cs` | Register in Program.cs |
-| Change message format | `CartFormatter.cs` | Update format methods |
-| Add platform feature | Extend `IMessagingPlatformHandler` | Implement in TelegramPlatformHandler |
-| Add checkout step | `StateService.cs` | New HandleAwaitingXAsync() |
-| Schedule task | Middleware in `Program.cs` | Add service |
-| Add validation | Any Service | Check before state change |
+| When You Need To...   | File                               | Method                               |
+| --------------------- | ---------------------------------- | ------------------------------------ |
+| Add a button          | `MenuKeyboard.cs`                  | Update MenuItems or Build()          |
+| Handle button click   | `CallbackQueryHandler.cs`          | Add case in HandleAsync()            |
+| Add a command         | `CommandHandler.cs`                | Add case in HandleAsync()            |
+| Store user data       | `FirestoreService.cs`              | New method                           |
+| Call external service | Create `*Service.cs`               | Register in Program.cs               |
+| Change message format | `CartFormatter.cs`                 | Update format methods                |
+| Add platform feature  | Extend `IMessagingPlatformHandler` | Implement in TelegramPlatformHandler |
+| Add checkout step     | `StateService.cs`                  | New HandleAwaitingXAsync()           |
+| Schedule task         | Middleware in `Program.cs`         | Add service                          |
+| Add validation        | Any Service                        | Check before state change            |
 
 ### Key Files at a Glance
 
