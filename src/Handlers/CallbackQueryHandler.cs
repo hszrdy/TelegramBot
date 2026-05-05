@@ -13,11 +13,13 @@ public class CallbackQueryHandler
 {
     private readonly OrderService _orderService;
     private readonly IMessagingPlatformHandler _platform;
+    private readonly FirestoreService _firestore;
 
-    public CallbackQueryHandler(OrderService orderService, IMessagingPlatformHandler platform)
+    public CallbackQueryHandler(OrderService orderService, IMessagingPlatformHandler platform, FirestoreService firestore)
     {
         _orderService = orderService;
         _platform = platform;
+        _firestore = firestore;
     }
 
     public async Task HandleAsync(CallbackQuery callbackQuery, Session session)
@@ -42,6 +44,38 @@ public class CallbackQueryHandler
                     await _orderService.HandleAddItemAsync(
                         chatId, messageId, itemName, price, session, callbackQuery.Id, _platform
                     );
+                    break;
+
+                case "increment":
+                    if (parts.Length < 3) break;
+                    var incItemName = parts[1];
+                    var incPrice = decimal.Parse(parts[2]);
+                    await _orderService.HandleIncrementItemAsync(
+                        chatId, messageId, incItemName, incPrice, session, callbackQuery.Id, _platform
+                    );
+                    break;
+
+                case "decrement":
+                    if (parts.Length < 3) break;
+                    var decItemName = parts[1];
+                    var decPrice = decimal.Parse(parts[2]);
+                    await _orderService.HandleDecrementItemAsync(
+                        chatId, messageId, decItemName, session, callbackQuery.Id, _platform
+                    );
+                    break;
+
+                case "select_item":
+                    if (parts.Length < 3) break;
+                    var selItemName = parts[1];
+                    var selPrice = decimal.Parse(parts[2]);
+                    var currentQty = session.Cart.FirstOrDefault(c => c.Name.Equals(selItemName, StringComparison.OrdinalIgnoreCase))?.Qty ?? 0;
+                    await _firestore.SetStateAsync(chatId, $"AWAITING_QUANTITY_{selItemName}|{selPrice}");
+                    await _platform.SendMessageAsync(chatId, $"Enter quantity for {selItemName} (current: {currentQty}):");
+                    await _platform.AnswerButtonClickAsync(callbackQuery.Id, "");
+                    break;
+
+                case "noop":
+                    // Do nothing
                     break;
 
                 case "remove":

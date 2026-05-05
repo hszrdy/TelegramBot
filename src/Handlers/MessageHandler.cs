@@ -49,6 +49,15 @@ public class MessageHandler
         }
 
         // Route based on session state
+        if (session.State.StartsWith("AWAITING_QUANTITY_"))
+        {
+            var stateParts = session.State.Substring("AWAITING_QUANTITY_".Length).Split('|');
+            var itemName = stateParts[0];
+            var price = decimal.Parse(stateParts[1]);
+            await _stateService.HandleAwaitingQuantityAsync(message.Chat.Id, itemName, price, text, session, _platform);
+            return;
+        }
+
         switch (session.State)
         {
             case SessionState.ChatMode:

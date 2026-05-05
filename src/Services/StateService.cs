@@ -57,4 +57,27 @@ public class StateService
         var updatedSession = await _firestore.GetOrCreateSessionAsync(chatId);
         await _orderService.ProcessCheckoutAsync(chatId, updatedSession, platform);
     }
+
+    public async Task HandleAwaitingQuantityAsync(
+        long chatId,
+        string itemName,
+        decimal price,
+        string quantityInput,
+        Session session,
+        IMessagingPlatformHandler platform)
+    {
+        if (!int.TryParse(quantityInput.Trim(), out var quantity) || quantity < 0)
+        {
+            var currentQty = session.Cart.FirstOrDefault(c => c.Name.Equals(itemName, StringComparison.OrdinalIgnoreCase))?.Qty ?? 0;
+            await platform.SendMessageAsync(chatId, $"Please enter a valid quantity (0 or more) for {itemName} (current: {currentQty}):");
+            return;
+        }
+
+        // Update cart to the specified quantity
+        var item = new CartItem { Name = itemName, Qty = quantity, Price = price };
+        var updatedCart = await _firestore.UpdateCartAsync(chatId, "update", new List<CartItem> { item });
+
+        await _firestore.SetStateAsync(chatId, SessionState.Browsing);
+        await platform.SendMenuAsync(chatId, updatedCart);
+    }
 }
